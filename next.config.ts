@@ -5,7 +5,9 @@ const nextConfig: NextConfig = {
   webpack: (config) => {
     config.resolve.alias = {
       ...config.resolve.alias,
-      "@declarations": path.resolve(__dirname, "src/declarations"),
+      "@declarations/cashcraft": path.resolve(__dirname, "src/declarations/cashcraft_backend"),
+      "@declarations/wallets": path.resolve(__dirname, "src/declarations/wallets_backend_backend"),
+      "@declarations/wallets_frontend": path.resolve(__dirname, "src/declarations/wallets_backend_frontend"),
     };
     return config;
   },

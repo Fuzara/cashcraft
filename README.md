@@ -1,3 +1,12 @@
+# CashCraft
+
+![Deploy to ICP](https://github.com/Fuzara/cashcraft/actions/workflows/deploy.yml/badge.svg)
+
+---
+
+## Overview
+CashCraft is a production-grade Internet Computer + Next.js project with automated canister deployments and Vercel frontend hosting.
+
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 ## Getting Started

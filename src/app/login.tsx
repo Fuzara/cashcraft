@@ -1,7 +1,7 @@
 // /src/app/login/page.tsx
 "use client";
 
-import { useAuth } from "@/lib/AuthContext";
+import { useAuth } from "@/contexts/AuthProvider";
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 

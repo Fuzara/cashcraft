@@ -1,0 +1,112 @@
+# .github/workflows/deploy.yml
+name: Deploy to IC and Trigger Vercel
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Validate dfx.json existence
+        run: |
+          count=$(find . -name dfx.json | wc -l)
+          if [ "$count" -ne 1 ]; then
+            echo "Error: Found $count dfx.json files. Expected 1."
+            exit 1
+          fi
+          echo "Validated: Exactly one dfx.json file found."
+
+      - name: Install DFX
+        run: |
+          DFX_VERSION="0.15.0" # Specify a stable DFX version
+          echo "Installing DFX version ${DFX_VERSION}..."
+          sh -ci "$(curl -fsSL https://internetcomputer.org/install.sh)" -- --version ${DFX_VERSION}
+          echo "$HOME/bin" >> $GITHUB_PATH
+
+      - name: Authenticate with DFX
+        env:
+          DFX_IDENTITY_PEM: ${{ secrets.DFX_IDENTITY_PEM }}
+        run: |
+          echo "Authenticating DFX identity..."
+          mkdir -p "$HOME/.config/dfx/identity/production/"
+          echo "${DFX_IDENTITY_PEM}" > "$HOME/.config/dfx/identity/production/identity.pem"
+          dfx identity use production
+          echo "DFX identity set to production."
+
+      - name: Check for sufficient cycles
+        run: |
+          echo "Checking wallet balance on IC network..."
+          dfx identity --network ic get-wallet
+          balance=$(dfx wallet --network ic balance)
+          echo "Current wallet balance: ${balance}"
+          # This is a basic check. Adjust the threshold based on your deployment cost.
+          # You can get a deployment cost estimate by running `dfx deploy --network ic --dry-run`
+          if [[ $(echo "${balance}" | grep -c "T cycles") -eq 0 || $(echo "${balance}" | sed 's/ T cycles//' | awk '{print ($1 < 0.5)}') -eq 1 ]]; then
+            echo "Error: Insufficient cycles for deployment. Balance is less than 0.5T cycles."
+            exit 1
+          fi
+          echo "Sufficient cycles available."
+
+      - name: Deploy all canisters to IC mainnet
+        run: |
+          echo "Deploying all canisters to the IC mainnet..."
+          dfx deploy --network ic --yes
+          echo "Deployment completed."
+
+      - name: Generate Canister Declarations
+        run: |
+          echo "Generating TypeScript declarations..."
+          dfx generate --network ic
+          echo "Declarations generated in src/declarations."
+
+      - name: Commit and Push Updated Declarations
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+          # Check if there are any changes to commit
+          if ! git diff --quiet src/declarations; then
+            echo "Changes detected in declarations. Committing..."
+            git add src/declarations
+            git commit -m "ci: update canister declarations"
+            git push
+            echo "Updated declarations pushed to main branch."
+          else
+            echo "No changes in declarations to commit."
+          fi
+
+      - name: Trigger Vercel Redeploy
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          echo "Triggering Vercel redeployment..."
+          # Extract canister IDs from the generated canister_ids.json
+          CASHCRAFT_BACKEND_CANISTER_ID=$(jq -r '.cashcraft_backend.ic' canister_ids.json)
+
+          # Trigger Vercel deployment hook
+          curl -X POST \
+            -H "Authorization: Bearer ${VERCEL_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "name": "cashcraft-deployment",
+              "gitSource": {
+                "type": "github",
+                "repoId": "'"${{ github.repository_id }}"'",
+                "ref": "main"
+              },
+              "environment": {
+                "NEXT_PUBLIC_CASHCRAFT_BACKEND_CANISTER_ID": "'"${CASHCRAFT_BACKEND_CANISTER_ID}"'"
+              }
+            }' \
+            "https://api.vercel.com/v13/deployments?projectId=${VERCEL_PROJECT_ID}"
+
+          echo "Vercel redeployment triggered successfully."

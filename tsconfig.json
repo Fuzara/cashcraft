@@ -21,7 +21,12 @@
     ],
     "paths": {
       "@/*": ["src/*"],
-      "@declarations/*": ["src/declarations/*"]
+      "@declarations/cashcraft": ["src/declarations/cashcraft_backend"],
+      "@declarations/wallets": ["src/declarations/wallets_backend_backend"],
+      "@declarations/wallets_frontend": ["src/declarations/wallets_backend_frontend"],
+      "@declarations/cashcraft/*": ["src/declarations/cashcraft_backend/*"],
+      "@declarations/wallets/*": ["src/declarations/wallets_backend_backend/*"],
+      "@declarations/wallets_frontend/*": ["src/declarations/wallets_backend_frontend/*"]
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts", "backend/src"],

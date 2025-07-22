@@ -1,7 +1,7 @@
 // /components/AuthStatus.tsx
 "use client";
 
-import { useAuth } from "@/lib/AuthContext";
+import { useAuth } from "@/contexts/AuthProvider";
 
 export default function AuthStatus() {
   const { principal, logout, isAuthenticated } = useAuth();

@@ -9,14 +9,23 @@ interface AuthContextProps {
   principal: string | null;
   login: () => Promise<void>;
   logout: () => Promise<void>;
+  loading: boolean;
 }
 
-const AuthContext = createContext<AuthContextProps | undefined>(undefined);
+const AuthContext = createContext<AuthContextProps>({
+  authClient: null,
+  isAuthenticated: false,
+  principal: null,
+  login: async () => {},
+  logout: async () => {},
+  loading: true,
+});
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [authClient, setAuthClient] = useState<AuthClient | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [principal, setPrincipal] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const init = async () => {
@@ -29,6 +38,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setIsAuthenticated(true);
         setPrincipal(identity.getPrincipal().toText());
       }
+      setLoading(false);
     };
 
     init();
@@ -55,16 +65,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ authClient, isAuthenticated, principal, login, logout }}>
+    <AuthContext.Provider value={{ authClient, isAuthenticated, principal, login, logout, loading }}>
       {children}
     </AuthContext.Provider>
   );
 };
 
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error("useAuth must be used within an AuthProvider");
-  }
-  return context;
-};
+export const useAuth = () => useContext(AuthContext);

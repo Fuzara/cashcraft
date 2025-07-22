@@ -7,3 +7,6 @@ export const useActor = <T extends CanisterName>(canisterName: T) => {
   const identity = (authClient as AuthClient)?.getIdentity();
   return createActor(canisterName, identity);
 };
+
+
+export const useBackendActor = () => useActor("cashcraft_backend");

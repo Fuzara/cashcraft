@@ -2,12 +2,12 @@ import { Actor, ActorSubclass, HttpAgent, Identity } from "@dfinity/agent";
 
 // Import IDL factories from declarations
 // The '@declarations' alias is configured in tsconfig.json and next.config.ts
-import { idlFactory as cashcraftIdlFactory } from "@declarations/cashcraft_backend";
-import { idlFactory as walletsIdlFactory } from "@declarations/wallets_backend";
+import { idlFactory as cashcraftIdlFactory } from "@declarations/cashcraft";
+import { idlFactory as walletsIdlFactory } from "@declarations/wallets";
 
 // Import service types from the .did files
-import type { _SERVICE as CashcraftService } from "@declarations/cashcraft_backend/cashcraft_backend.did";
-import type { _SERVICE as WalletsService } from "@declarations/wallets_backend/wallets_backend.did";
+import type { _SERVICE as CashcraftService } from "@declarations/cashcraft/cashcraft_backend.did";
+import type { _SERVICE as WalletsService } from "@declarations/wallets/wallets_backend_backend.did";
 
 // A map of canister names to their IDL factories
 const idlFactories = {
