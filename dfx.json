@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "canisters": {
+    "cashcraft_backend": {
+      "type": "motoko",
+      "main": "backend/src/cashcraft_backend/main.mo"
+    }
+  },
+  "defaults": {
+    "build": {
+      "packtool": "",
+      "args": ""
+    }
+  },
+  "output_env_file": ".env",
+  "networks": {
+    "local": {
+      "bind": "127.0.0.1:4943",
+      "type": "ephemeral"
+    }
+  }
+}
+

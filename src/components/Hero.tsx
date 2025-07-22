@@ -1,9 +1,12 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import styles from "./Hero.module.css";
+import { useAuth } from "@/contexts/AuthProvider";
+import { useBackendActor } from "@/hooks/useActor";
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -12,6 +15,38 @@ export default function Hero() {
   const subheadingRef = useRef(null);
   const buttonRef = useRef(null);
   const bgRef = useRef(null);
+  const router = useRouter();
+
+  const { isAuthenticated, login, logout, principal } = useAuth();
+  const actor = useBackendActor();
+
+  const log = async (event: string, metadata = "") => {
+    try {
+      await actor?.track_event?.(event, metadata);
+    } catch (e) {
+      console.warn("Logging failed:", e);
+    }
+  };
+
+  const handleLogin = async () => {
+    await log("click_login", "Hero");
+    await login();
+  };
+
+  const handleSignUp = async () => {
+    await log("click_signup", "Hero");
+    router.push("/signup");
+  };
+
+  const handleDashboardRedirect = async () => {
+    await log("click_dashboard", `isAuthenticated: ${isAuthenticated}`);
+    router.push(isAuthenticated ? "/dashboard" : "/login");
+  };
+
+  const handleLogout = async () => {
+    await log("click_logout", "Hero");
+    await logout();
+  };
 
   useEffect(() => {
     gsap.fromTo(
@@ -42,11 +77,30 @@ export default function Hero() {
       opacity: 0,
       ease: "none",
     });
-  }, []);
+
+    // Log Hero section load
+    if (actor) {
+      log("view_hero", `principal: ${principal ?? "anonymous"}`);
+    }
+  }, [actor]);
 
   return (
     <section className={styles.hero}>
       <div ref={bgRef} className={styles.backgroundImage}></div>
+
+      <div className={styles.topNav}>
+        {!isAuthenticated ? (
+          <>
+            <button onClick={handleLogin}>Login</button>
+            <button onClick={handleSignUp}>Sign Up</button>
+          </>
+        ) : (
+          <>
+            <button onClick={handleDashboardRedirect}>Dashboard</button>
+            <button onClick={handleLogout}>Logout</button>
+          </>
+        )}
+      </div>
 
       <h1 ref={headingRef} className={styles.heading}>
         CashCraft helps you <span className={styles.highlight}>split</span>,{" "}
@@ -58,10 +112,13 @@ export default function Hero() {
         A sleek, modern way to automate your finances, built for the modern African millennial.
       </p>
 
-      <button ref={buttonRef} className={styles.cta}>
-        Download the App
+      <button
+        ref={buttonRef}
+        className={styles.cta}
+        onClick={handleDashboardRedirect}
+      >
+        Go to Dashboard
       </button>
     </section>
-  
   );
 }
