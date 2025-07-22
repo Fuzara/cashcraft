@@ -1,13 +1,15 @@
 {
-<<<<<<< HEAD
   "name": "cashcraft",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "dfx:deploy": "dfx deploy && dfx generate",
+    "ci:check": "npm run lint && npm run build"
   },
   "dependencies": {
     "gsap": "^3.13.0",
@@ -23,24 +25,12 @@
     "eslint": "^9",
     "eslint-config-next": "15.3.5",
     "typescript": "^5"
-  }
-}
-=======
+  },
   "engines": {
     "node": ">=16.0.0",
     "npm": ">=7.0.0"
   },
-  "name": "wallets_backend",
-  "scripts": {
-    "build": "npm run build --workspaces --if-present",
-    "prebuild": "npm run prebuild --workspaces --if-present",
-    "pretest": "npm run prebuild --workspaces --if-present",
-    "start": "npm start --workspaces --if-present",
-    "test": "npm test --workspaces --if-present"
-  },
-  "type": "module",
   "workspaces": [
     "src/wallets_backend_frontend"
   ]
 }
->>>>>>> 719edb8 (Initial commit.)
