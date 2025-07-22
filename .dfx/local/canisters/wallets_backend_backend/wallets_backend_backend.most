@@ -1,5 +1,0 @@
-// Version: 1.0.0
-type Wallet__161041130 = {balance : Nat; id : Nat; name : Text};
-actor {
-  stable var walletBackup : [(Principal, [Wallet__161041130])]
-};

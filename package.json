@@ -3,11 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --turbopack",
+    "dfx:deploy": "dfx deploy && dfx generate",
     "build": "next build",
-    "start": "next start",
     "lint": "next lint",
-    "deploy": "dfx deploy && dfx generate"
+    "ci:check": "npm run lint && npm run build && dfx build"
   },
   "dependencies": {
     "@dfinity/auth-client": "^2.4.1",

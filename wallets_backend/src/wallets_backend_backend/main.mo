@@ -1,72 +1,79 @@
-import Array "mo:base/Array";
-import Nat "mo:base/Nat";
+import TrieMap "mo:base/TrieMap";
 import Principal "mo:base/Principal";
-import HashMap "mo:base/HashMap";
-import Iter "mo:base/Iter";
+import Debug "mo:base/Debug";
+import Buffer "mo:base/Buffer";
+import Array "mo:base/Array";
 
 actor {
-  public type Wallet = {
-    id: Nat;
-    name: Text;
-    balance: Nat;
-  };
+  type Wallet = { id: Nat; name: Text; balance: Nat };
 
-  // Stable variable for upgrade persistence
-  stable var walletBackup: [(Principal, [Wallet])] = [];
+  stable var walletEntries : [(Principal, [Wallet])] = [];
 
-  // In-memory HashMap for runtime operations
-  var wallets: HashMap.HashMap<Principal, [Wallet]> = HashMap.fromIter(Iter.fromArray(walletBackup), 10, Principal.equal, Principal.hash);
+  // Runtime structure
+  var wallets = TrieMap.TrieMap<Principal, [Wallet]>(Principal.equal, Principal.hash);
 
-  // Backup data before an upgrade
-  system func preupgrade() {
-    walletBackup := Iter.toArray(wallets.entries());
-  };
-
-  // Restore data after an upgrade
+  // Load stable data into TrieMap on upgrade
   system func postupgrade() {
-    wallets := HashMap.fromIter(Iter.fromArray(walletBackup), walletBackup.size(), Principal.equal, Principal.hash);
+    Debug.print("Restoring wallets...");
+    for ((p, ws) in walletEntries.vals()) {
+      wallets.put(p, ws);
+    };
   };
 
-  public shared (msg) func getWallets() : async [Wallet] {
+  // Save TrieMap into stable format before upgrade
+  system func preupgrade() {
+    Debug.print("Backing up wallets...");
+    walletEntries := wallets.entries();
+  };
+
+  public shared (msg) func create_wallet(name: Text, initialBalance: Nat) : async Wallet {
+    let user = msg.caller;
+    let newId = switch (wallets.get(user)) {
+      case (?list) list.size();
+      case (null) 0;
+    };
+    let wallet: Wallet = { id = newId; name = name; balance = initialBalance };
+    let updated = switch (wallets.get(user)) {
+      case (?list) list # [wallet];
+      case (null) [wallet];
+    };
+    wallets.put(user, updated);
+    return wallet;
+  };
+
+  public query func get_wallets(user: Principal) : async [Wallet] {
+    switch (wallets.get(user)) {
+      case (?list) list;
+      case (null) [];
+    }
+  };
+
+  public shared (msg) func update_balance(walletId: Nat, newBalance: Nat) : async Bool {
     let user = msg.caller;
     switch (wallets.get(user)) {
-      case (null) { return []; };
-      case (?userWallets) { return userWallets; };
+      case (?list) {
+        let buffer = Buffer.fromArray<Wallet>(list);
+        if (walletId < buffer.size()) {
+          let w = buffer.get(walletId);
+          buffer.put(walletId, { id = w.id; name = w.name; balance = newBalance });
+          wallets.put(user, Buffer.toArray(buffer));
+          return true;
+        };
+        return false;
+      };
+      case (null) return false;
     };
   };
 
-  public shared (msg) func createWallet(name: Text) : async () {
-    let user = msg.caller;
-    let newWallet: Wallet = {
-      id = 0; // Simplified ID generation
-      name = name;
-      balance = 0;
-    };
-
-    switch (wallets.get(user)) {
-      case (null) {
-        wallets.put(user, [newWallet]);
-      };
-      case (?userWallets) {
-        wallets.put(user, Array.append(userWallets, [newWallet]));
-      };
-    };
-  };
-
-  public shared (msg) func updateBalance(walletId: Nat, newBalance: Nat) : async () {
+  public shared (msg) func delete_wallet(walletId: Nat) : async Bool {
     let user = msg.caller;
     switch (wallets.get(user)) {
-      case (null) { };
-      case (?userWallets) {
-        let updatedWallets = Array.map(userWallets, func(wallet: Wallet) : Wallet {
-          if (wallet.id == walletId) {
-            return { id = wallet.id; name = wallet.name; balance = newBalance };
-          } else {
-            return wallet;
-          };
-        });
-        wallets.put(user, updatedWallets);
+      case (?list) {
+        let filtered = Array.filter<Wallet>(list, func(w) { w.id != walletId });
+        wallets.put(user, filtered);
+        return true;
       };
+      case (null) return false;
     };
   };
-};
+}
