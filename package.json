@@ -11,5 +11,8 @@
   "devDependencies": {
     "concurrently": "^8.2.2",
     "mops": "latest"
+  },
+  "dependencies": {
+    "recharts": "^3.1.0"
   }
 }
