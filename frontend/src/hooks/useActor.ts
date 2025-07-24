@@ -3,7 +3,8 @@ import { ActorSubclass, Identity, Actor } from "@dfinity/agent";
 import { AuthClient } from "@dfinity/auth-client";
 import { createActor, CanisterName, ServiceMap } from "../lib/createActor";
 import { Principal } from "@dfinity/principal";
-import { getMockWallets, saveMockWallets } from "../utils/mockWallets";
+import { getMockData, saveMockData } from "../utils/mockWallets";
+import { Wallet } from "../app/dashboard/page";
 
 // --- Mock Actor for Local Development ---
 
@@ -15,20 +16,21 @@ const createMockActor = <T extends CanisterName>(canisterName: T): ActorSubclass
   const mockActor = {
     get_wallets: async () => {
       console.log("[Mock] get_wallets() called");
-      return getMockWallets();
+      return getMockData().wallets;
     },
-    create_wallet: async (name: string) => {
+    create_wallet: async (name: string, balance: bigint) => {
       console.log(`[Mock] create_wallet(${name}) called`);
-      const wallets = getMockWallets();
-      const newWallet = {
-        id: BigInt(wallets.length + 1),
+      const data = getMockData();
+      const newWallet: Wallet = {
+        id: BigInt(Date.now()),
         name,
-        balance: 0n,
-        owner: Principal.fromText("2vxsx-fae"),
-        subWallets: []
+        balance: balance || 0n,
+        owner: Principal.fromText("2vxsx-fae"), // A mock principal
+        subWallets: [],
+        transactions: [],
       };
-      const updatedWallets = [...wallets, newWallet];
-      saveMockWallets(updatedWallets);
+      data.wallets.push(newWallet);
+      saveMockData(data);
       return newWallet;
     },
     // Add other methods from your service definitions as needed

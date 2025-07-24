@@ -1,12 +1,15 @@
 "use client";
 
-import { motion, AnimatePresence } from "framer-motion";
+import { useState, useEffect } from "react";
 import { Wallet } from "../app/dashboard/page";
+import { motion, AnimatePresence } from "framer-motion";
 
 type DeleteWalletModalProps = {
   isOpen: boolean;
   onClose: () => void;
-  onConfirmDelete: (targetWalletId: bigint | "reserve") => void;
+  onConfirmDelete: (
+    transferTarget: "reserve" | { walletId: bigint } | null
+  ) => void;
   wallets: Wallet[];
   walletToDelete: Wallet | null;
 };
@@ -18,67 +21,102 @@ export default function DeleteWalletModal({
   wallets,
   walletToDelete,
 }: DeleteWalletModalProps) {
-  if (!isOpen || !walletToDelete) return null;
+  const [transferTarget, setTransferTarget] = useState<
+    "reserve" | string | null
+  >(null);
 
-  const availableWallets = wallets.filter((w) => w.id !== walletToDelete.id);
+  const availableWallets = wallets.filter(
+    (w) => w.id !== walletToDelete?.id
+  );
+
+  useEffect(() => {
+    if (availableWallets.length > 0) {
+      setTransferTarget(availableWallets[0].id.toString());
+    } else {
+      setTransferTarget("reserve");
+    }
+  }, [isOpen, walletToDelete]);
+
+  const handleConfirm = () => {
+    if (wallets.length <= 1) {
+      alert("You cannot delete your last wallet.");
+      return;
+    }
+
+    if (transferTarget === "reserve") {
+      onConfirmDelete("reserve");
+    } else if (transferTarget) {
+      onConfirmDelete({ walletId: BigInt(transferTarget) });
+    }
+    onClose();
+  };
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center p-4">
-        <motion.div
-          initial={{ opacity: 0, y: -50 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: 50 }}
-          className="bg-white rounded-2xl shadow-2xl w-full max-w-md"
-        >
-          <header className="p-6 border-b border-gray-200">
-            <h2 className="text-xl font-bold text-gray-800">Delete Wallet</h2>
-            <p className="text-sm text-gray-500">
-              You are about to delete "{walletToDelete.name}".
+      {isOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+            className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full"
+          >
+            <h2 className="text-2xl font-bold text-gray-800 mb-4">
+              Delete Wallet
+            </h2>
+            <p className="text-gray-600 mb-6">
+              You are about to delete the wallet "
+              <strong>{walletToDelete?.name}</strong>".
             </p>
-          </header>
-          <main className="p-6 space-y-4">
-            <p>Where should the funds go?</p>
-            <button
-              onClick={() => onConfirmDelete("reserve")}
-              className="w-full px-4 py-2 text-white bg-blue-600 rounded-lg hover:bg-blue-700"
-            >
-              Move to Reserve Balance
-            </button>
-            {availableWallets.length > 0 && (
+
+            {wallets.length > 1 ? (
               <>
-                <div className="relative my-4">
-                  <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-gray-300" />
-                  </div>
-                  <div className="relative flex justify-center">
-                    <span className="bg-white px-2 text-sm text-gray-500">OR</span>
-                  </div>
-                </div>
+                <p className="font-semibold mb-2">
+                  Where should the funds go?
+                </p>
                 <select
-                  onChange={(e) => onConfirmDelete(BigInt(e.target.value))}
-                  className="w-full p-2 border rounded-lg"
+                  value={transferTarget ?? ""}
+                  onChange={(e) => setTransferTarget(e.target.value)}
+                  className="w-full p-3 border rounded-lg mb-6"
                 >
-                  <option value="">Transfer to another wallet...</option>
-                  {availableWallets.map((w) => (
-                    <option key={w.id.toString()} value={w.id.toString()}>
-                      {w.name}
+                  <option value="reserve">Move to Reserve</option>
+                  {availableWallets.map((wallet) => (
+                    <option key={wallet.id.toString()} value={wallet.id.toString()}>
+                      {wallet.name}
                     </option>
                   ))}
                 </select>
+                <div className="flex justify-end gap-4">
+                  <button
+                    onClick={onClose}
+                    className="px-6 py-2 rounded-lg text-gray-700 bg-gray-200 hover:bg-gray-300"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleConfirm}
+                    className="px-6 py-2 rounded-lg text-white bg-error hover:bg-red-600"
+                  >
+                    Delete
+                  </button>
+                </div>
               </>
+            ) : (
+              <div className="text-center">
+                <p className="text-error font-semibold mb-4">
+                  This is your last wallet and it cannot be deleted.
+                </p>
+                <button
+                  onClick={onClose}
+                  className="px-6 py-2 rounded-lg text-white bg-primary hover:bg-blue-700"
+                >
+                  Close
+                </button>
+              </div>
             )}
-          </main>
-          <footer className="p-6 bg-gray-50 rounded-b-2xl">
-            <button
-              onClick={onClose}
-              className="w-full px-4 py-2 text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300"
-            >
-              Cancel
-            </button>
-          </footer>
-        </motion.div>
-      </div>
+          </motion.div>
+        </div>
+      )}
     </AnimatePresence>
   );
 }

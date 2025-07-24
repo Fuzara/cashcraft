@@ -1,23 +1,25 @@
-import { Wallet, SubWallet } from "../app/dashboard/page";
+import { Wallet, SubWallet, Transaction, TransactionType } from "../app/dashboard/page";
 import { Principal } from "@dfinity/principal";
 
 // --- Constants ---
 const ICP_TO_USD_RATE = 7.5;
-const MOCK_WALLET_STORAGE_KEY = "mockWallets";
-const RESERVE_BALANCE_KEY = "reserveBalance";
+const MOCK_DATA_KEY = "cashCraftMockData";
+
+// --- Data Schema ---
+type MockData = {
+  wallets: Wallet[];
+  transactions: Transaction[];
+  reserveBalance: bigint;
+};
 
 // --- Deep Clone Helper ---
 export const deepClone = <T>(obj: T): T => {
-  // Use a robust JSON-based deep clone with BigInt support as a fallback
   return JSON.parse(
-    JSON.stringify(obj, (key, value) => {
-      if (typeof value === "bigint") {
-        return { type: "bigint", value: value.toString() };
-      }
-      return value;
-    }),
+    JSON.stringify(obj, (key, value) => 
+      typeof value === 'bigint' ? { type: 'bigint', value: value.toString() } : value
+    ),
     (key, value) => {
-      if (typeof value === "object" && value !== null && value.type === "bigint") {
+      if (typeof value === 'object' && value !== null && value.type === 'bigint') {
         return BigInt(value.value);
       }
       return value;
@@ -26,12 +28,10 @@ export const deepClone = <T>(obj: T): T => {
 };
 
 // --- Session Storage Abstraction ---
-
 const isSessionStorageAvailable = (): boolean => {
   try {
-    const testKey = "__test__";
-    sessionStorage.setItem(testKey, testKey);
-    sessionStorage.removeItem(testKey);
+    sessionStorage.setItem('__test__', '__test__');
+    sessionStorage.removeItem('__test__');
     return true;
   } catch (e) {
     return false;
@@ -41,12 +41,8 @@ const isSessionStorageAvailable = (): boolean => {
 let inMemoryStore: Record<string, string> = {};
 
 const storage = {
-  getItem: (key: string): string | null => {
-    if (isSessionStorageAvailable()) {
-      return sessionStorage.getItem(key);
-    }
-    return inMemoryStore[key] || null;
-  },
+  getItem: (key: string): string | null => 
+    isSessionStorageAvailable() ? sessionStorage.getItem(key) : inMemoryStore[key] || null,
   setItem: (key: string, value: string): void => {
     if (isSessionStorageAvailable()) {
       sessionStorage.setItem(key, value);
@@ -57,14 +53,14 @@ const storage = {
 };
 
 // --- Initial Mock Data ---
-const getInitialMockWallets = (): Wallet[] => {
-  const mockPrincipal = Principal.fromText("2vxsx-fae"); // A consistent mock principal
+const getInitialMockData = (): MockData => {
+  const mockPrincipal = Principal.fromText("2vxsx-fae");
 
   const salarySubWallets: Omit<SubWallet, "balance">[] = [
-    { id: 101n, name: "Bills", percentage: 40 },
-    { id: 102n, name: "Savings", percentage: 20 },
-    { id: 103n, name: "Entertainment", percentage: 10 },
-    { id: 104n, name: "Subscriptions", percentage: 30 },
+    { id: 101n, name: "Housing", percentage: 35 },
+    { id: 102n, name: "Groceries", percentage: 25 },
+    { id: 103n, name: "Transport", percentage: 15 },
+    { id: 104n, name: "Utilities", percentage: 25 },
   ];
 
   const allowanceSubWallets: Omit<SubWallet, "balance">[] = [
@@ -73,109 +69,144 @@ const getInitialMockWallets = (): Wallet[] => {
     { id: 203n, name: "Other", percentage: 40 },
   ];
 
-  const wallets: Omit<Wallet, "subWallets">[] = [
+  const wallets: Wallet[] = [
     {
       id: 1n,
       owner: mockPrincipal,
       name: "Salary",
-      balance: 2000_00000000n,
+      balance: 120000000000n, // Approx $1200
+      subWallets: salarySubWallets.map(sw => ({...sw, balance: 0n})),
+      transactions: [
+        { id: "tx1", description: "Paycheck", amount: 1200, category: "Income", date: "2023-10-26T10:00:00Z", type: "income" },
+        { id: "tx2", description: "Rent", amount: 600, category: "Bills", date: "2023-10-27T11:00:00Z", type: "expense" },
+      ],
     },
     {
       id: 2n,
       owner: mockPrincipal,
-      name: "Allowance",
-      balance: 1000_00000000n,
+      name: "Monthly Allowance",
+      balance: 50000000000n, // Approx $500
+      subWallets: allowanceSubWallets.map(sw => ({...sw, balance: 0n})),
+      transactions: [
+        { id: "tx3", description: "Weekly Top-up", amount: 125, category: "Income", date: "2023-10-26T09:00:00Z", type: "income" },
+      ],
     },
   ];
 
-  return wallets.map((wallet, index) => {
-    const subWallets = index === 0 ? salarySubWallets : allowanceSubWallets;
-    const fullWallet: Wallet = {
-        ...wallet,
-        subWallets: subWallets.map(sw => ({...sw, balance: 0n})) // temp balance
-    };
-    return calculateSubWalletAmounts(fullWallet);
-  });
+  // Calculate initial sub-wallet balances
+  wallets.forEach(calculateSubWalletAmounts);
+
+  return {
+    wallets,
+    transactions: wallets.flatMap(w => w.transactions),
+    reserveBalance: 0n,
+  };
 };
 
 // --- Mock Data Management ---
-
-export const getMockWallets = (): Wallet[] => {
-  const storedData = storage.getItem(MOCK_WALLET_STORAGE_KEY);
+export const getMockData = (): MockData => {
+  const storedData = storage.getItem(MOCK_DATA_KEY);
   if (storedData) {
-    // Deserialize with BigInt support
-    return JSON.parse(storedData, (key, value) => {
-      if (typeof value === "object" && value !== null && value.type === "bigint") {
-        return BigInt(value.value);
-      }
-      return value;
+    const data = JSON.parse(storedData, (key, value) => {
+        if (typeof value === 'object' && value !== null && value.type === 'bigint') {
+            return BigInt(value.value);
+        }
+        return value;
     });
+    // Data migration for robustness
+    const initialData = getInitialMockData();
+    data.wallets = data.wallets.map((w: Wallet) => {
+      const initialWallet = initialData.wallets.find(iw => iw.id === w.id);
+      return {
+        ...w,
+        transactions: w.transactions || [],
+        subWallets: (w.subWallets && w.subWallets.length > 0) ? w.subWallets : (initialWallet?.subWallets || [])
+      };
+    });
+    data.transactions = data.transactions || [];
+    data.reserveBalance = data.reserveBalance || 0n;
+    
+    // Recalculate subwallet balances after migration
+    data.wallets.forEach(calculateSubWalletAmounts);
+    
+    return data;
   }
-  const initialData = getInitialMockWallets();
-  saveMockWallets(initialData);
+  const initialData = getInitialMockData();
+  saveMockData(initialData);
   return initialData;
 };
 
-export const saveMockWallets = (wallets: Wallet[]): void => {
-  // Serialize with BigInt support
-  const serializedData = JSON.stringify(wallets, (key, value) => {
-    if (typeof value === "bigint") {
-      return { type: "bigint", value: value.toString() };
-    }
-    return value;
-  });
-  storage.setItem(MOCK_WALLET_STORAGE_KEY, serializedData);
+export const saveMockData = (data: MockData): void => {
+  storage.setItem(MOCK_DATA_KEY, JSON.stringify(data, (key, value) => 
+    typeof value === 'bigint' ? { type: 'bigint', value: value.toString() } : value
+  ));
 };
 
-export const getReserveBalance = (): bigint => {
-  const storedReserve = storage.getItem(RESERVE_BALANCE_KEY);
-  return storedReserve ? BigInt(storedReserve) : 0n;
+export const resetMockData = (): void => {
+    const initialData = getInitialMockData();
+    saveMockData(initialData);
 };
 
-export const saveReserveBalance = (amount: bigint): void => {
-  storage.setItem(RESERVE_BALANCE_KEY, amount.toString());
-};
-
-export const addToReserve = (amount: bigint): void => {
-  const currentReserve = getReserveBalance();
-  saveReserveBalance(currentReserve + amount);
-};
-
-export const moveFundsBetweenWallets = (sourceId: bigint, targetId: bigint, amount: bigint): void => {
-    const wallets = getMockWallets();
-    const sourceWallet = wallets.find(w => w.id === sourceId);
-    const targetWallet = wallets.find(w => w.id === targetId);
-
-    if (sourceWallet && targetWallet) {
-        sourceWallet.balance -= amount;
-        targetWallet.balance += amount;
-        saveMockWallets(wallets);
-    }
-};
-
-export const updateWalletName = (walletId: bigint, newName: string): void => {
-    const wallets = getMockWallets();
-    const walletToUpdate = wallets.find(w => w.id === walletId);
-    if (walletToUpdate) {
-        walletToUpdate.name = newName;
-        saveMockWallets(wallets);
+// --- Transaction Helpers ---
+export const addTransaction = (walletId: bigint, transaction: Omit<Transaction, 'id' | 'date'>): void => {
+    const data = getMockData();
+    const walletIndex = data.wallets.findIndex(w => w.id === walletId);
+    if (walletIndex > -1) {
+        const wallet = data.wallets[walletIndex];
+        const newTransaction: Transaction = {
+            ...transaction,
+            id: Date.now().toString(),
+            date: new Date().toISOString(),
+        };
+        data.transactions.push(newTransaction);
+        wallet.transactions.push(newTransaction);
+        
+        const amountE8s = BigInt(Math.round(newTransaction.amount / ICP_TO_USD_RATE * 1_00000000));
+        if (newTransaction.type === 'expense') {
+            wallet.balance -= amountE8s;
+        } else {
+            wallet.balance += amountE8s;
+        }
+        
+        // Recalculate sub-wallet balances and update the wallet in the array
+        data.wallets[walletIndex] = calculateSubWalletAmounts(wallet);
+        
+        saveMockData(data);
     }
 };
 
-export const clearMockWallets = (): void => {
-  storage.setItem(MOCK_WALLET_STORAGE_KEY, "[]");
-  storage.setItem(RESERVE_BALANCE_KEY, "0");
+export const updateTransaction = (updatedTransaction: Transaction): void => {
+    const data = getMockData();
+    const txIndex = data.transactions.findIndex(t => t.id === updatedTransaction.id);
+    if (txIndex > -1) {
+        data.transactions[txIndex] = updatedTransaction;
+        data.wallets.forEach(w => {
+            const walletTxIndex = w.transactions.findIndex(t => t.id === updatedTransaction.id);
+            if (walletTxIndex > -1) {
+                w.transactions[walletTxIndex] = updatedTransaction;
+            }
+        });
+        saveMockData(data);
+    }
+};
+
+export const deleteTransaction = (transactionId: string): void => {
+    const data = getMockData();
+    data.transactions = data.transactions.filter(t => t.id !== transactionId);
+    data.wallets.forEach(w => {
+        w.transactions = w.transactions.filter(t => t.id !== transactionId);
+    });
+    saveMockData(data);
 };
 
 // --- Utility Functions ---
-
-export function calculateSubWalletAmounts(wallet: Wallet): Wallet {
+export const calculateSubWalletAmounts = (wallet: Wallet): Wallet => {
     const updatedSubWallets = wallet.subWallets.map(sw => ({
         ...sw,
         balance: (wallet.balance * BigInt(sw.percentage)) / 100n,
     }));
     return { ...wallet, subWallets: updatedSubWallets };
-}
+};
 
 export const getMainWalletTotal = (wallets: Wallet[]): bigint => {
     return wallets.reduce((acc, wallet) => acc + wallet.balance, 0n);

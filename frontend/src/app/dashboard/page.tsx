@@ -4,22 +4,19 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import { Principal } from "@dfinity/principal";
 import { useActor } from "../../hooks/useActor";
 import WalletCard from "../../components/WalletCard";
-import Navbar from "../../components/Navbar";
 import WalletModal from "../../components/WalletModal";
 import { ActorSubclass } from "@dfinity/agent";
 import { _SERVICE as WalletsService } from "../../declarations/wallets_backend_backend/service.did";
 import {
-  getMockWallets,
-  saveMockWallets,
+  getMockData,
+  saveMockData,
   formatCurrencyPair,
-  clearMockWallets,
-  getReserveBalance,
+  resetMockData,
   getMainWalletTotal,
-  addToReserve,
-  moveFundsBetweenWallets,
 } from "../../utils/mockWallets";
 import Toast, { useToast } from "../../components/Toast";
 import DeleteWalletModal from "../../components/DeleteWalletModal";
+import AnalyticsPanel from "../../components/AnalyticsPanel";
 
 // --- Data Structures ---
 export type SubWallet = {
@@ -29,49 +26,65 @@ export type SubWallet = {
   balance: bigint;
 };
 
+export type TransactionType = "income" | "expense";
+
+export type Transaction = {
+  id: string;
+  description: string;
+  amount: number;
+  category: string;
+  date: string;
+  type: TransactionType;
+  walletName?: string;
+};
+
 export type Wallet = {
   id: bigint;
   owner: Principal;
   name: string;
   balance: bigint;
   subWallets: SubWallet[];
+  transactions: Transaction[];
 };
 
 // --- Components ---
 
-const MainWalletSummary = ({ wallets }: { wallets: Wallet[] }) => {
+const MainWalletSummary = ({
+  wallets,
+  reserveBalance,
+}: {
+  wallets: Wallet[];
+  reserveBalance: bigint;
+}) => {
   const totalBalance = getMainWalletTotal(wallets);
-  const reserveBalance = getReserveBalance();
 
   return (
-    <div className="bg-white p-6 rounded-xl shadow-md flex justify-between items-center mb-8">
-      <div>
-        <h2 className="text-lg font-semibold text-gray-600">Total Balance</h2>
-        <p className="text-3xl font-bold text-gray-900">
-          {formatCurrencyPair(totalBalance)}
-        </p>
-      </div>
-      <div>
-        <h2 className="text-lg font-semibold text-gray-600">Reserve Balance</h2>
-        <p className="text-3xl font-bold text-indigo-600">
-          {formatCurrencyPair(reserveBalance)}
-        </p>
-      </div>
-      <div>
-        <h2 className="text-lg font-semibold text-gray-600">Wallets</h2>
-        <p className="text-3xl font-bold text-gray-900">{wallets.length}</p>
+    <div className="bg-gradient-to-r from-primary to-secondary text-white p-6 rounded-2xl shadow-lg mb-8">
+      <div className="flex justify-between items-start">
+        <div>
+          <h2 className="text-lg font-semibold text-indigo-200 mb-2">
+            Total Balance
+          </h2>
+          <p className="text-4xl font-bold tracking-tight">
+            {formatCurrencyPair(totalBalance)}
+          </p>
+          <p className="text-indigo-200 mt-2">{wallets.length} Wallets</p>
+        </div>
+        {reserveBalance > 0n && (
+          <div className="text-right">
+            <h2 className="text-lg font-semibold text-indigo-200 mb-2">
+              Reserve
+            </h2>
+            <p className="text-2xl font-bold tracking-tight">
+              {formatCurrencyPair(reserveBalance)}
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );
 };
 
-const NavbarSkeleton = () => (
-  <nav className="bg-white shadow-md">
-    <div className="container mx-auto px-8">
-      <div className="h-16 w-full bg-gray-200 rounded"></div>
-    </div>
-  </nav>
-);
 const HeaderSkeleton = () => (
   <div className="animate-pulse">
     <div className="h-8 bg-gray-300 rounded w-1/4 mb-2"></div>
@@ -107,6 +120,7 @@ export default function Dashboard() {
   } = useActor("wallets_backend");
   const [wallets, setWallets] = useState<Wallet[]>([]);
   const [loading, setLoading] = useState(false);
+  const [reserveBalance, setReserveBalance] = useState(0n);
   const [error, setError] = useState<string | null>(null);
   const [walletName, setWalletName] = useState("");
   const [isCreating, setIsCreating] = useState(false);
@@ -120,19 +134,34 @@ export default function Dashboard() {
   const handleOpenDeleteModal = (wallet: Wallet) => setWalletToDelete(wallet);
   const handleCloseDeleteModal = () => setWalletToDelete(null);
 
-  const handleDeleteWallet = (targetWalletId: bigint | "reserve") => {
+  const handleDeleteWallet = (
+    transferTarget: "reserve" | { walletId: bigint } | null
+  ) => {
     if (!walletToDelete) return;
 
-    if (targetWalletId === "reserve") {
-      addToReserve(walletToDelete.balance);
-    } else {
-      moveFundsBetweenWallets(walletToDelete.id, targetWalletId, walletToDelete.balance);
+    if (wallets.length <= 1) {
+      showToast("Cannot delete the last wallet.", "error");
+      return;
     }
 
-    const updatedWallets = wallets.filter(w => w.id !== walletToDelete.id);
-    setWallets(updatedWallets);
-    saveMockWallets(updatedWallets);
+    const data = getMockData();
+    const walletIndex = data.wallets.findIndex(w => w.id === walletToDelete.id);
+    if (walletIndex === -1) return;
 
+    const deletedWallet = data.wallets[walletIndex];
+
+    if (transferTarget === "reserve") {
+      data.reserveBalance = (data.reserveBalance || 0n) + deletedWallet.balance;
+    } else if (transferTarget) {
+      const targetWallet = data.wallets.find(w => w.id === transferTarget.walletId);
+      if (targetWallet) {
+        targetWallet.balance += deletedWallet.balance;
+      }
+    }
+
+    data.wallets.splice(walletIndex, 1);
+    saveMockData(data);
+    setWallets(data.wallets);
     showToast("Wallet deleted successfully!", "success");
     handleCloseDeleteModal();
   };
@@ -142,16 +171,21 @@ export default function Dashboard() {
       currentWallets.map((w) => (w.id === updatedWallet.id ? updatedWallet : w))
     );
     if (isMock) {
-      saveMockWallets(
-        wallets.map((w) => (w.id === updatedWallet.id ? updatedWallet : w))
-      );
+        const data = getMockData();
+        const index = data.wallets.findIndex(w => w.id === updatedWallet.id);
+        if (index > -1) {
+            data.wallets[index] = updatedWallet;
+            saveMockData(data);
+        }
     }
   };
 
   const fetchWallets = useCallback(async () => {
     if (!actor || !isAuthenticated || isInitializing) {
       if (isMock) {
-        setWallets(getMockWallets());
+        const mockData = getMockData();
+        setWallets(mockData.wallets);
+        setReserveBalance(mockData.reserveBalance);
       }
       return;
     }
@@ -167,7 +201,8 @@ export default function Dashboard() {
       const walletsWithSubWallets = userWallets.map((w) => ({
         ...w,
         owner: principal,
-        subWallets: [], // Assuming subwallets are not fetched from the backend yet
+        subWallets: [],
+        transactions: [],
       }));
       setWallets(walletsWithSubWallets);
     } catch (err) {
@@ -195,6 +230,7 @@ export default function Dashboard() {
         ...newWalletData,
         owner: identity!.getPrincipal(),
         subWallets: [],
+        transactions: [],
       };
       setWallets((prev) => [...prev, newWallet]);
       setWalletName("");
@@ -208,19 +244,16 @@ export default function Dashboard() {
 
   if (isInitializing) {
     return (
-      <div className="min-h-screen bg-gray-100">
-        <NavbarSkeleton />
-        <main className="container mx-auto p-8">
-          <HeaderSkeleton />
-          <div className="mt-8">
-            <CreateWalletFormSkeleton />
-          </div>
-          <div className="mt-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            <WalletCardSkeleton />
-            <WalletCardSkeleton />
-            <WalletCardSkeleton />
-          </div>
-        </main>
+      <div className="container mx-auto p-8">
+        <HeaderSkeleton />
+        <div className="mt-8">
+          <CreateWalletFormSkeleton />
+        </div>
+        <div className="mt-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          <WalletCardSkeleton />
+          <WalletCardSkeleton />
+          <WalletCardSkeleton />
+        </div>
       </div>
     );
   }
@@ -291,6 +324,7 @@ export default function Dashboard() {
               wallet={wallet}
               onClick={() => handleOpenModal(wallet)}
               onDelete={() => handleOpenDeleteModal(wallet)}
+              isActive={selectedWallet?.id === wallet.id}
             />
           ))}
         </div>
@@ -299,69 +333,66 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      <Navbar isAuthenticated={isAuthenticated} logout={logout} />
-      <main className="container mx-auto p-8">
-        <Toast toast={toast} onClose={hideToast} />
-        <div className="flex justify-between items-center mb-8">
-            <div>
-                <h1 className="text-3xl font-bold text-gray-800">Dashboard</h1>
-                <p className="text-gray-500">Welcome back to your CashCraft dashboard.</p>
-            </div>
-            {isMock && (
-                <button
-                    onClick={() => {
-                        clearMockWallets();
-                        showToast("Demo reset successful", "success");
-                        setTimeout(() => {
-                            window.location.reload();
-                        }, 1500); // Delay to allow toast to be seen
-                    }}
-                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition-all"
-                >
-                    🔄 Reset Demo Data
-                </button>
-            )}
-        </div>
+    <div className="container mx-auto p-8">
+      <Toast toast={toast} onClose={hideToast} />
+      <div className="flex justify-between items-center mb-8">
+          <div>
+              <h1 className="text-3xl font-bold text-gray-800">Dashboard</h1>
+              <p className="text-gray-500">Welcome back to your CashCraft dashboard.</p>
+          </div>
+          {isMock && (
+              <button
+                  onClick={() => {
+                      resetMockData();
+                      showToast("Demo reset successful", "success");
+                      setTimeout(() => window.location.reload(), 1500);
+                  }}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition-all"
+              >
+                  🔄 Reset Demo Data
+              </button>
+          )}
+      </div>
 
-        {isMock && (
-          <div
-            className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 mb-8 rounded-r-lg"
-            role="alert"
+      {isMock && (
+        <div
+          className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 mb-8 rounded-r-lg"
+          role="alert"
+        >
+          <p className="font-bold">Mock Mode Active</p>
+          <p>
+            You are interacting with mock data. No real backend calls are
+            being made.
+          </p>
+        </div>
+      )}
+
+      <MainWalletSummary wallets={wallets} reserveBalance={reserveBalance} />
+
+      <div className="mb-8 bg-white p-6 rounded-xl shadow-md">
+        <h2 className="text-2xl font-bold mb-4">Create a new wallet</h2>
+        <div className="flex flex-col sm:flex-row gap-4">
+          <input
+            type="text"
+            value={walletName}
+            onChange={(e) => setWalletName(e.target.value)}
+            placeholder="My New Wallet"
+            className="p-3 border rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:outline-none transition"
+            disabled={isCreating}
+          />
+          <button
+            onClick={createWallet}
+            className="px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-all duration-300"
+            disabled={isCreating || loading}
           >
-            <p className="font-bold">Mock Mode Active</p>
-            <p>
-              You are interacting with mock data. No real backend calls are
-              being made.
-            </p>
-          </div>
-        )}
-
-        <MainWalletSummary wallets={wallets} />
-
-        <div className="mb-8 bg-white p-6 rounded-xl shadow-md">
-          <h2 className="text-2xl font-bold mb-4">Create a new wallet</h2>
-          <div className="flex flex-col sm:flex-row gap-4">
-            <input
-              type="text"
-              value={walletName}
-              onChange={(e) => setWalletName(e.target.value)}
-              placeholder="My New Wallet"
-              className="p-3 border rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:outline-none transition"
-              disabled={isCreating}
-            />
-            <button
-              onClick={createWallet}
-              className="px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-all duration-300"
-              disabled={isCreating || loading}
-            >
-              {isCreating ? "Creating..." : "Create Wallet"}
-            </button>
-          </div>
+            {isCreating ? "Creating..." : "Create Wallet"}
+          </button>
         </div>
+      </div>
 
-        {renderContent()}
-      </main>
+      {renderContent()}
+
+      <AnalyticsPanel wallets={wallets} transactions={wallets.flatMap(w => w.transactions)} />
       <WalletModal
         wallet={selectedWallet}
         isOpen={!!selectedWallet}
