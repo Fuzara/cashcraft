@@ -11,8 +11,15 @@ import { _SERVICE as WalletsService } from "../../declarations/wallets_backend_b
 import {
   getMockWallets,
   saveMockWallets,
-  formatAmount,
+  formatCurrencyPair,
+  clearMockWallets,
+  getReserveBalance,
+  getMainWalletTotal,
+  addToReserve,
+  moveFundsBetweenWallets,
 } from "../../utils/mockWallets";
+import Toast, { useToast } from "../../components/Toast";
+import DeleteWalletModal from "../../components/DeleteWalletModal";
 
 // --- Data Structures ---
 export type SubWallet = {
@@ -33,20 +40,27 @@ export type Wallet = {
 // --- Components ---
 
 const MainWalletSummary = ({ wallets }: { wallets: Wallet[] }) => {
-  const totalBalance = useMemo(
-    () => wallets.reduce((acc, wallet) => acc + wallet.balance, 0n),
-    [wallets]
-  );
+  const totalBalance = getMainWalletTotal(wallets);
+  const reserveBalance = getReserveBalance();
 
   return (
-    <div className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white p-8 rounded-2xl shadow-xl mb-12">
-      <h2 className="text-xl font-semibold text-blue-200 mb-2">
-        Main Wallet Summary
-      </h2>
-      <p className="text-5xl font-bold tracking-tight">
-        {formatAmount(totalBalance)}
-      </p>
-      <p className="text-blue-200 mt-2">{wallets.length} Wallets</p>
+    <div className="bg-white p-6 rounded-xl shadow-md flex justify-between items-center mb-8">
+      <div>
+        <h2 className="text-lg font-semibold text-gray-600">Total Balance</h2>
+        <p className="text-3xl font-bold text-gray-900">
+          {formatCurrencyPair(totalBalance)}
+        </p>
+      </div>
+      <div>
+        <h2 className="text-lg font-semibold text-gray-600">Reserve Balance</h2>
+        <p className="text-3xl font-bold text-indigo-600">
+          {formatCurrencyPair(reserveBalance)}
+        </p>
+      </div>
+      <div>
+        <h2 className="text-lg font-semibold text-gray-600">Wallets</h2>
+        <p className="text-3xl font-bold text-gray-900">{wallets.length}</p>
+      </div>
     </div>
   );
 };
@@ -97,9 +111,31 @@ export default function Dashboard() {
   const [walletName, setWalletName] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const [selectedWallet, setSelectedWallet] = useState<Wallet | null>(null);
+  const [walletToDelete, setWalletToDelete] = useState<Wallet | null>(null);
+  const { toast, showToast, hideToast } = useToast();
 
   const handleOpenModal = (wallet: Wallet) => setSelectedWallet(wallet);
   const handleCloseModal = () => setSelectedWallet(null);
+
+  const handleOpenDeleteModal = (wallet: Wallet) => setWalletToDelete(wallet);
+  const handleCloseDeleteModal = () => setWalletToDelete(null);
+
+  const handleDeleteWallet = (targetWalletId: bigint | "reserve") => {
+    if (!walletToDelete) return;
+
+    if (targetWalletId === "reserve") {
+      addToReserve(walletToDelete.balance);
+    } else {
+      moveFundsBetweenWallets(walletToDelete.id, targetWalletId, walletToDelete.balance);
+    }
+
+    const updatedWallets = wallets.filter(w => w.id !== walletToDelete.id);
+    setWallets(updatedWallets);
+    saveMockWallets(updatedWallets);
+
+    showToast("Wallet deleted successfully!", "success");
+    handleCloseDeleteModal();
+  };
 
   const handleUpdateWallet = (updatedWallet: Wallet) => {
     setWallets((currentWallets) =>
@@ -254,6 +290,7 @@ export default function Dashboard() {
               key={Number(wallet.id)}
               wallet={wallet}
               onClick={() => handleOpenModal(wallet)}
+              onDelete={() => handleOpenDeleteModal(wallet)}
             />
           ))}
         </div>
@@ -265,6 +302,28 @@ export default function Dashboard() {
     <div className="min-h-screen bg-gray-100">
       <Navbar isAuthenticated={isAuthenticated} logout={logout} />
       <main className="container mx-auto p-8">
+        <Toast toast={toast} onClose={hideToast} />
+        <div className="flex justify-between items-center mb-8">
+            <div>
+                <h1 className="text-3xl font-bold text-gray-800">Dashboard</h1>
+                <p className="text-gray-500">Welcome back to your CashCraft dashboard.</p>
+            </div>
+            {isMock && (
+                <button
+                    onClick={() => {
+                        clearMockWallets();
+                        showToast("Demo reset successful", "success");
+                        setTimeout(() => {
+                            window.location.reload();
+                        }, 1500); // Delay to allow toast to be seen
+                    }}
+                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition-all"
+                >
+                    🔄 Reset Demo Data
+                </button>
+            )}
+        </div>
+
         {isMock && (
           <div
             className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 mb-8 rounded-r-lg"
@@ -308,6 +367,14 @@ export default function Dashboard() {
         isOpen={!!selectedWallet}
         onClose={handleCloseModal}
         onUpdate={handleUpdateWallet}
+        showToast={showToast}
+      />
+      <DeleteWalletModal
+        isOpen={!!walletToDelete}
+        onClose={handleCloseDeleteModal}
+        onConfirmDelete={handleDeleteWallet}
+        wallets={wallets}
+        walletToDelete={walletToDelete}
       />
     </div>
   );

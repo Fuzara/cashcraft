@@ -1,20 +1,24 @@
 import { Wallet, SubWallet } from "../app/dashboard/page";
 import { Principal } from "@dfinity/principal";
 
+// --- Constants ---
+const ICP_TO_USD_RATE = 7.5;
+const MOCK_WALLET_STORAGE_KEY = "mockWallets";
+const RESERVE_BALANCE_KEY = "reserveBalance";
+
 // --- Deep Clone Helper ---
 export const deepClone = <T>(obj: T): T => {
-  if (typeof structuredClone === "function") {
-    return structuredClone(obj);
-  }
-  // Fallback for environments without structuredClone, handling BigInt
+  // Use a robust JSON-based deep clone with BigInt support as a fallback
   return JSON.parse(
-    JSON.stringify(obj, (_, value) =>
-      typeof value === "bigint" ? value.toString() : value
-    ),
-    (_, value) => {
-      // Reviver to convert string back to BigInt
-      if (typeof value === "string" && /^\d+n$/.test(value)) {
-        return BigInt(value.slice(0, -1));
+    JSON.stringify(obj, (key, value) => {
+      if (typeof value === "bigint") {
+        return { type: "bigint", value: value.toString() };
+      }
+      return value;
+    }),
+    (key, value) => {
+      if (typeof value === "object" && value !== null && value.type === "bigint") {
+        return BigInt(value.value);
       }
       return value;
     }
@@ -22,7 +26,6 @@ export const deepClone = <T>(obj: T): T => {
 };
 
 // --- Session Storage Abstraction ---
-const MOCK_WALLET_STORAGE_KEY = "mockWallets";
 
 const isSessionStorageAvailable = (): boolean => {
   try {
@@ -70,22 +73,29 @@ const getInitialMockWallets = (): Wallet[] => {
     { id: 203n, name: "Other", percentage: 40 },
   ];
 
-  return [
+  const wallets: Omit<Wallet, "subWallets">[] = [
     {
       id: 1n,
       owner: mockPrincipal,
       name: "Salary",
-      balance: 200000n, // Representing $2000.00
-      subWallets: calculateSubWalletAmounts(200000n, salarySubWallets),
+      balance: 2000_00000000n,
     },
     {
       id: 2n,
       owner: mockPrincipal,
-      name: "Monthly Allowance",
-      balance: 100000n, // Representing $1000.00
-      subWallets: calculateSubWalletAmounts(100000n, allowanceSubWallets),
+      name: "Allowance",
+      balance: 1000_00000000n,
     },
   ];
+
+  return wallets.map((wallet, index) => {
+    const subWallets = index === 0 ? salarySubWallets : allowanceSubWallets;
+    const fullWallet: Wallet = {
+        ...wallet,
+        subWallets: subWallets.map(sw => ({...sw, balance: 0n})) // temp balance
+    };
+    return calculateSubWalletAmounts(fullWallet);
+  });
 };
 
 // --- Mock Data Management ---
@@ -117,21 +127,73 @@ export const saveMockWallets = (wallets: Wallet[]): void => {
   storage.setItem(MOCK_WALLET_STORAGE_KEY, serializedData);
 };
 
+export const getReserveBalance = (): bigint => {
+  const storedReserve = storage.getItem(RESERVE_BALANCE_KEY);
+  return storedReserve ? BigInt(storedReserve) : 0n;
+};
+
+export const saveReserveBalance = (amount: bigint): void => {
+  storage.setItem(RESERVE_BALANCE_KEY, amount.toString());
+};
+
+export const addToReserve = (amount: bigint): void => {
+  const currentReserve = getReserveBalance();
+  saveReserveBalance(currentReserve + amount);
+};
+
+export const moveFundsBetweenWallets = (sourceId: bigint, targetId: bigint, amount: bigint): void => {
+    const wallets = getMockWallets();
+    const sourceWallet = wallets.find(w => w.id === sourceId);
+    const targetWallet = wallets.find(w => w.id === targetId);
+
+    if (sourceWallet && targetWallet) {
+        sourceWallet.balance -= amount;
+        targetWallet.balance += amount;
+        saveMockWallets(wallets);
+    }
+};
+
+export const updateWalletName = (walletId: bigint, newName: string): void => {
+    const wallets = getMockWallets();
+    const walletToUpdate = wallets.find(w => w.id === walletId);
+    if (walletToUpdate) {
+        walletToUpdate.name = newName;
+        saveMockWallets(wallets);
+    }
+};
+
+export const clearMockWallets = (): void => {
+  storage.setItem(MOCK_WALLET_STORAGE_KEY, "[]");
+  storage.setItem(RESERVE_BALANCE_KEY, "0");
+};
+
 // --- Utility Functions ---
 
-export function calculateSubWalletAmounts(
-  totalBalance: bigint,
-  subWallets: Omit<SubWallet, "balance">[]
-): SubWallet[] {
-  return subWallets.map((sw) => ({
-    ...sw,
-    balance: (totalBalance * BigInt(sw.percentage)) / 100n,
-  }));
+export function calculateSubWalletAmounts(wallet: Wallet): Wallet {
+    const updatedSubWallets = wallet.subWallets.map(sw => ({
+        ...sw,
+        balance: (wallet.balance * BigInt(sw.percentage)) / 100n,
+    }));
+    return { ...wallet, subWallets: updatedSubWallets };
 }
 
-export const formatAmount = (amount: bigint, decimals: number = 2): string => {
-    const amountString = amount.toString();
-    const integerPart = amountString.slice(0, -decimals) || "0";
-    const fractionalPart = amountString.slice(-decimals).padStart(decimals, "0");
-    return `$${Number(integerPart).toLocaleString()}.${fractionalPart}`;
-}
+export const getMainWalletTotal = (wallets: Wallet[]): bigint => {
+    return wallets.reduce((acc, wallet) => acc + wallet.balance, 0n);
+};
+
+export const formatCurrencyPair = (balanceE8s: bigint): string => {
+  const icpAmount = Number(balanceE8s) / 1_00000000;
+  const usdAmount = icpAmount * ICP_TO_USD_RATE;
+
+  const formattedIcp = new Intl.NumberFormat("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(icpAmount);
+
+  const formattedUsd = new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+  }).format(usdAmount);
+
+  return `${formattedIcp} ICP (${formattedUsd})`;
+};
