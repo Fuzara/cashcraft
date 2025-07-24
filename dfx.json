@@ -3,7 +3,11 @@
   "canisters": {
     "cashcraft_backend": {
       "type": "motoko",
-      "main": "backend/src/cashcraft_backend/main.mo"
+      "main": "backend/cashcraft_backend/src/main.mo"
+    },
+    "wallets_backend_backend": {
+      "type": "motoko",
+      "main": "backend/wallets_backend/src/main.mo"
     }
   },
   "defaults": {
@@ -13,6 +17,10 @@
     }
   },
   "output_env_file": ".env",
+  "declarations": {
+    "output": "frontend/src/declarations",
+    "bindings": "typescript"
+  },
   "networks": {
     "local": {
       "bind": "127.0.0.1:4943",

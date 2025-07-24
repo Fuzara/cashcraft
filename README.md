@@ -11,23 +11,42 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## Getting Started
 
-First, run the development server:
+### Requirements
+
+Make sure you have the following tools installed:
+- [dfx](https://internetcomputer.org/docs/current/developer-docs/setup/install/)
+- [Node.js](https://nodejs.org/)
+- [jq](https://stedolan.github.io/jq/download/)
+
+### Running the Local Development Environment
+
+To get everything running locally, from the root of the project, run the following command:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+# Make the script executable (only needs to be done once)
+chmod +x full_sync_and_run.sh
+
+# Run the local development server
+npm run start:local
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+This single command will:
+1.  Start a clean, local replica.
+2.  Deploy all canisters.
+3.  Generate canister type definitions.
+4.  Set up the necessary environment variables for the frontend.
+5.  Install all dependencies.
+6.  Start the Next.js development server.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Deploying to Mainnet (IC)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+To deploy your canisters to the IC mainnet, run the following command:
+
+```bash
+dfx deploy --network ic
+```
+
+After deploying, you will need to configure your frontend to use the mainnet canister IDs, which can be found in `.dfx/ic/canister_ids.json`.
 
 ## Learn More
 

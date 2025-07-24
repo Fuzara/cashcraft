@@ -4,8 +4,17 @@ type Wallet =
    id: nat;
    name: text;
  };
+type SubWallet = 
+ record {
+   invest: nat;
+   save: nat;
+   spend: nat;
+ };
 service : {
-  createWallet: (name: text) -> ();
-  getWallets: () -> (vec Wallet);
-  updateBalance: (walletId: nat, newBalance: nat) -> ();
+  create_wallet: (name: text, initialBalance: nat) -> (Wallet);
+  delete_wallet: (walletId: nat) -> (bool);
+  deposit: (amount: nat) -> ();
+  get_sub_wallet: (user: principal) -> (opt SubWallet) query;
+  get_wallets: (user: principal) -> (vec Wallet) query;
+  update_balance: (walletId: nat, newBalance: nat) -> (bool);
 }

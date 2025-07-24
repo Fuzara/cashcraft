@@ -3,25 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dfx:deploy": "dfx deploy && dfx generate",
-    "build": "next build",
-    "lint": "next lint",
-    "ci:check": "npm run lint && npm run build && dfx build"
-  },
-  "dependencies": {
-    "@dfinity/auth-client": "^2.4.1",
-    "gsap": "^3.13.0",
-    "next": "15.3.5",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "heal": "scripts/heal_env_and_declarations.sh",
+    "start:local": "npm run heal && ./full_sync_and_run.sh local",
+    "start:ic": "npm run heal -- ic && ./full_sync_and_run.sh ic",
+    "install:all": "npm install && cd frontend && npm install"
   },
   "devDependencies": {
-    "@eslint/eslintrc": "^3",
-    "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "eslint": "^9",
-    "eslint-config-next": "15.3.5",
-    "typescript": "^5"
+    "concurrently": "^8.2.2",
+    "mops": "latest"
   }
 }
